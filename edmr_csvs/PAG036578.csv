@@ -1,0 +1,5 @@
+﻿Permit_Number,Primary_Facility_ID,Primary_Facility_Name,Client_ID,Client_Name,Region,County,Municipality,Address1,Address2,City,State,Zip,Latitude,Longitude,Monitoring_Period_Begin_Date,Monitoring_Period_End_Date,DMR_Received_Date,Outfall,Discharge,Monitoring_Location,Parameter_Name,Parameter_Code,DMR_Value,Permit_Limit,Units,Statistical_Base_Code
+PAG036578,562714,RESCO PRODUCTS TARENTUM,5514,RESCO PROD INC,SWRO,Allegheny,Tarentum Boro,WEST 6TH AVE & CTR ST,,TARENTUM,PA,15084-0028,40.599111,-79.759889,07/01/2024,12/31/2024,01/13/2025,001,No,Final Effluent,,,,,,
+PAG036578,562714,RESCO PRODUCTS TARENTUM,5514,RESCO PROD INC,SWRO,Allegheny,Tarentum Boro,WEST 6TH AVE & CTR ST,,TARENTUM,PA,15084-0028,40.599111,-79.759889,07/01/2024,12/31/2024,01/13/2025,002,No,Final Effluent,,,,,,
+PAG036578,562714,RESCO PRODUCTS TARENTUM,5514,RESCO PROD INC,SWRO,Allegheny,Tarentum Boro,WEST 6TH AVE & CTR ST,,TARENTUM,PA,15084-0028,40.599111,-79.759889,07/01/2024,12/31/2024,01/13/2025,004,No,Final Effluent,,,,,,
+

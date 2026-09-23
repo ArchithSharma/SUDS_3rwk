@@ -1,0 +1,4 @@
+﻿Permit_Number,Primary_Facility_ID,Primary_Facility_Name,Client_ID,Client_Name,Region,County,Municipality,Address1,Address2,City,State,Zip,Latitude,Longitude,Monitoring_Period_Begin_Date,Monitoring_Period_End_Date,DMR_Received_Date,Outfall,Discharge,Monitoring_Location,Parameter_Name,Parameter_Code,DMR_Value,Permit_Limit,Units,Statistical_Base_Code
+PAG036603,885799,PENN WASTE PGH TRANS STA,1514,TRI CNTY IND INC,SWRO,Allegheny,Stowe Twp,2201 ROBINSON BLVD,,MC KEES ROCKS,PA,15136-2043,40.491944,-80.089722,01/01/2026,06/30/2026,05/21/2026,002,No,Final Effluent,,,,,,
+PAG036603,885799,PENN WASTE PGH TRANS STA,1514,TRI CNTY IND INC,SWRO,Allegheny,Stowe Twp,2201 ROBINSON BLVD,,MC KEES ROCKS,PA,15136-2043,40.491944,-80.089722,01/01/2026,06/30/2026,05/21/2026,001,No,Final Effluent,,,,,,
+
