@@ -299,7 +299,8 @@ def download_one_permit(
     view_btn.click()
 
     # Wait a fixed 45 seconds after clicking View Report before doing anything else.
-    page.wait_for_timeout(30000)
+    page.wait_for_timeout(30000) 
+    # TODO: This is a hacky workaround for the fact that the report takes a long time to load, and could be a little shorter. 30 seconds is safe, but 25 might work.
     print("  [4/5] Waited 30000ms after clicking 'View Report'")
 
     try:
