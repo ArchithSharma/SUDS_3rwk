@@ -229,7 +229,7 @@ function render(){
   list.forEach(r => {
     const f = facs[r[1]], cens = r[5] === 1;
     const imp = cens ? (r[11] >= 5
-      ? `<br><i>Imputed: 90th percentile of smoothed bootstrap from ${r[11]} measured values up to X</i>`
+      ? `<br><i>Imputed: expected value (importance sampling) from ${r[11]} measured values up to X</i>`
       : '<br><i>Too few measured values below X; used X/2</i>') : '';
     const sfx = isPH ? ' in |pH - 7|' : '';
     const html = `<b>${esc(f.name)}</b><br>${esc(f.client)}<br><small>Facility ID ${esc(f.id)} &middot; ${esc(f.county)} Co. &middot; ${esc(f.muni)}</small><hr style="margin:4px 0">`+
