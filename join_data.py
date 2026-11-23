@@ -1,3 +1,5 @@
+# Archive file, now is done in edmr_downloader.py
+
 import pandas as pd
 import glob
 

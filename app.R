@@ -8,8 +8,10 @@ library(nationalparkcolors)   # remotes::install_github("katiejolly/nationalpark
 
 set.seed(42)
 
+# TODO: When you get new data, change this to the updated CSVs and the app will be rebuilt!
+DATA_PATH <- "edmr_csvs/combined_data.csv"   
+
 # ---- Settings ---------------------------------------------------------------
-DATA_PATH <- "edmr_csvs/combined_data.csv"   # change if needed
 B         <- 10000   # importance-sampling draws per "<X"
 MIN_POOL  <- 5       # min measured values <= X needed to estimate a distribution
 FLAT_TOL  <- log2(1.10)  # changes smaller than +/-10% get no arrow
@@ -46,7 +48,7 @@ all_rows <- read_csv(DATA_PATH, show_col_types = FALSE,
   filter(Parameter_Name %in% contaminants) |>
   mutate(DMR_Value = str_trim(DMR_Value))
 
-# E / FF / GG rows (kept for the summary table)
+# E / FF / GG rows
 flag_rows <- all_rows |>
   filter(DMR_Value %in% c("E", "FF", "GG")) |>
   transmute(Primary_Facility_ID, Primary_Facility_Name, Client_Name,
@@ -64,7 +66,7 @@ raw <- all_rows |>
          !is.na(num_value), num_value > 0,
          !is.na(begin_date), !is.na(end_date),
          !is.na(Latitude), !is.na(Longitude),
-         Longitude < -76, Longitude > -81, Latitude > 39, Latitude < 43)
+         Longitude < -76, Longitude > -81, Latitude > 39, Latitude < 43) # TODO: If your data is outside this bounding box, change these numbers to include it.
 
 # ---- Importance-sampling imputation for "<X" values -------------------------
 # For each (parameter, X): fit a kernel density (log10 scale, like the ridgeline
