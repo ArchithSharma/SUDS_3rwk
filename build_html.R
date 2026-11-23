@@ -16,7 +16,7 @@ fin  <- function(x) { x <- round(x, 3); x[!is.finite(x)] <- NA; x }
 facs <- dat |>
   distinct(Primary_Facility_ID, Latitude, Longitude, .keep_all = TRUE) |>
   transmute(id = Primary_Facility_ID, name = Primary_Facility_Name, client = Client_Name,
-            county = County, muni = Municipality, lat = Latitude, lon = Longitude)
+            county = County, muni = Municipality, lat = Latitude, lon = Longitude, sic = sic)
 fi   <- match(paste(dat$Primary_Facility_ID, dat$Latitude, dat$Longitude),
               paste(facs$id, facs$lat, facs$lon)) - 1L
 pidx <- match(dat$Parameter_Name, counts$Parameter_Name) - 1L
@@ -31,8 +31,22 @@ flags <- flag_rows |>
   summarise(name = first(Primary_Facility_Name), client = first(Client_Name),
             E = sum(flag == "E"), FF = sum(flag == "FF"), GG = sum(flag == "GG"),
             .groups = "drop")
+# SIC codes for the map filter (ordered by number of facilities); the count shown
+# next to each code is computed live in the page from `sicrecs` below.
+sics <- distinct(facs, id, sic) |> count(sic) |> arrange(desc(n), sic)
+# Records per contaminant x SIC x reporting period: mapped records plus E/FF/GG
+# records (no data). Period start/end are month indices, like `recs`.
+sicrecs <- bind_rows(
+    transmute(dat, p = match(Parameter_Name, counts$Parameter_Name),
+              b = mi(begin_date), e = mi(end_date), sic),
+    transmute(flag_rows, p = match(Parameter_Name, counts$Parameter_Name),
+              b = mi(begin_date), e = mi(end_date), sic)) |>
+  filter(!is.na(p), !is.na(b), !is.na(e)) |>
+  count(p = p - 1L, b, e, sic) |>
+  pmap(function(p, b, e, sic, n) list(p, b, e, sic, n))
 json <- toJSON(list(params = transmute(counts, name = Parameter_Name, n = n),
-                    facs = facs, recs = recs, months = month_labels, flags = flags),
+                    facs = facs, recs = recs, months = month_labels, flags = flags,
+                    sics = sics, sicrecs = sicrecs),
                auto_unbox = TRUE, na = "null", digits = NA, dataframe = "rows")
 
 # 3) Logo embedded so the HTML is one file (falls back to a relative path)
@@ -100,6 +114,13 @@ html <- r"-----(<!DOCTYPE html>
   .twrap{max-height:380px;overflow:auto;border:1px solid #ddd}
   footer{display:flex;justify-content:space-between;align-items:center;padding-bottom:20px}
   footer a{color:#337ab7}
+  .sicbox{background:#fff;padding:8px 10px;border-radius:4px;font-size:12px;width:230px;box-shadow:0 0 6px #0004;line-height:1.4}
+  .sicbox details{margin:4px 0}
+  .sicbox summary{font-size:12px}
+  .sicbox .note{margin:4px 0;color:#737373;font-size:11px}
+  .sicbox p{margin:4px 0}
+  .sicbox .list{max-height:220px;overflow-y:auto;margin-top:4px}
+  .sicbox a{color:#337ab7;cursor:pointer}
   @media(max-width:760px){#app{flex-direction:column}aside{width:100%}header{flex-direction:column;align-items:flex-start}}
 </style>
 </head>
@@ -155,7 +176,7 @@ html <- r"-----(<!DOCTYPE html>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 const D = __DATA__;
-const {params, facs, recs, months, flags} = D;
+const {params, facs, recs, months, flags, sics, sicrecs} = D;
 const FLAT = Math.log2(1.10), CAP = 3, ANG = 45;
 const VIR = __ZION__;   // Zion palette from nationalparkcolors (low -> high)
 const rgb = s => [1,3,5].map(i => parseInt(s.substr(i,2),16));
@@ -206,6 +227,29 @@ shapeLeg.onAdd = () => { const d = L.DomUtil.create('div','leg');
   d.innerHTML = '&#9679; measured value<br>&#9670; below detection (&lt;X, imputed)<br><span style="color:#c0392b">&#9650;</span> increase &nbsp;<span style="color:#2471a3">&#9660;</span> decrease'; return d; };
 shapeLeg.addTo(map);
 
+// ---- SIC filter (top right) ----
+let selSic = new Set(sics.map(s => s.sic));
+const sicCtl = L.control({position:'topright'});
+sicCtl.onAdd = () => {
+  const d = L.DomUtil.create('div','sicbox');
+  d.innerHTML = '<details open><summary style="cursor:pointer;font-style:normal"><strong>Filter by Primary SIC code</strong></summary>'+
+    '<details title="Standard Industrial Classification (SIC) codes categorize U.S. businesses by industry."><summary style="font-style:italic;cursor:pointer">What are these codes? (Click me!)</summary>'+
+    '<p>Standard Industrial Classification (SIC) codes are four-digit codes that categorize U.S. businesses by their primary economic activity - each different SIC code is a type of industry, and <strong>facilities with the same SIC code should have similar contaminant levels.</strong></p></details>'+
+    '<p class="note">Note: SIC code counts include E/FF/GG records which have no data, so the number of records by SIC might not be the number of points on the map!</p>'+
+    '<div><a id="sicAll">Select all</a> | <a id="sicNone">Clear</a></div>'+
+    '<div class="list">'+ sics.map(s =>
+      `<label class="opt"><input type="checkbox" class="sicchk" value="${esc(s.sic)}" checked> ${esc(s.sic)} (<span class="sicn" data-sic="${esc(s.sic)}">0</span>)</label>`).join('') +'</div></details>';
+  L.DomEvent.disableClickPropagation(d);
+  L.DomEvent.disableScrollPropagation(d);
+  return d;
+};
+sicCtl.addTo(map);
+const sicChecks = () => [...document.querySelectorAll('.sicchk')];
+const readSic = () => { selSic = new Set(sicChecks().filter(c => c.checked).map(c => c.value)); render(); };
+sicChecks().forEach(c => c.onchange = readSic);
+document.getElementById('sicAll').onclick  = () => { sicChecks().forEach(c => c.checked = true);  readSic(); };
+document.getElementById('sicNone').onclick = () => { sicChecks().forEach(c => c.checked = false); readSic(); };
+
 function pointSvg(fill, cens){
   const s = cens
     ? `<polygon points="10,1.5 18.5,10 10,18.5 1.5,10" fill="${fill}" stroke="#222" stroke-width="1.6"/>`
@@ -220,6 +264,13 @@ function arrowSvg(up, L_, col){
     `<polygon points="${c},${c-L_} ${c-8},${c-L_+hl} ${c+8},${c-L_+hl}" fill="${col}" ${st}/></g></svg>`;
 }
 
+// live SIC counts: records (mapped + E/FF/GG) for this contaminant active in this month
+function updateSicCounts(m){
+  const c = {};
+  sicrecs.forEach(r => { if (r[0] === P && r[1] <= m && r[2] >= m) c[r[3]] = (c[r[3]] || 0) + r[4]; });
+  document.querySelectorAll('.sicn').forEach(el => { el.textContent = c[el.dataset.sic] || 0; });
+}
+
 function render(){
   const isPH = params[P].name === 'pH';
   $('phnote').hidden = !isPH;
@@ -227,7 +278,8 @@ function render(){
     '<div class="grad" style="background:linear-gradient(to right,'+VIR.join(',')+')"></div><div><span>0</span><span>100</span></div>';
   pts.clearLayers(); arrows.clearLayers();
   const m = +slider.value;
-  const list = byP[P].filter(r => r[2] <= m && r[3] >= m);
+  updateSicCounts(m);
+  const list = byP[P].filter(r => r[2] <= m && r[3] >= m && selSic.has(facs[r[1]].sic));
   $('summary').textContent = `${list.length} facilities shown (${list.filter(r=>r[5]).length} below detection)`;
   list.forEach(r => {
     const f = facs[r[1]], cens = r[5] === 1;

@@ -9,7 +9,7 @@ library(nationalparkcolors)   # remotes::install_github("katiejolly/nationalpark
 set.seed(42)
 
 # TODO: When you get new data, change this to the updated CSVs and the app will be rebuilt!
-DATA_PATH <- "edmr_csvs/combined_data.csv"   
+DATA_PATH <- "edmr_csvs/combined_data_with_SIC.csv"   
 
 # ---- Settings ---------------------------------------------------------------
 B         <- 10000   # importance-sampling draws per "<X"
@@ -18,6 +18,7 @@ FLAT_TOL  <- log2(1.10)  # changes smaller than +/-10% get no arrow
 ARROW_CAP <- 3           # |log2 change| at which arrow length maxes out (8x)
 PH_EPS    <- 0.1         # offset so |pH - 7| = 0 doesn't break ratios
 ARROW_ANGLE <- 45        # degrees from vertical: increases lean right, decreases lean left
+SIC_COL   <- "Primary_SIC_Code"   # name of the SIC column in the CSV
 
 APP_TITLE <- "3 Rivers Waterkeeper: Allegheny County EDMR Data Explorer"
 LOGO_FILE <- "3rwk.avif"
@@ -52,7 +53,10 @@ all_rows <- read_csv(DATA_PATH, show_col_types = FALSE,
 flag_rows <- all_rows |>
   filter(DMR_Value %in% c("E", "FF", "GG")) |>
   transmute(Primary_Facility_ID, Primary_Facility_Name, Client_Name,
-            Parameter_Name, flag = DMR_Value)
+            Parameter_Name, flag = DMR_Value,
+            begin_date = as.Date(Monitoring_Period_Begin_Date, format = "%m/%d/%Y"),
+            end_date   = as.Date(Monitoring_Period_End_Date,   format = "%m/%d/%Y"),
+            sic        = coalesce(na_if(str_trim(.data[[SIC_COL]]), ""), "Unknown"))
 
 # ---- Clean for mapping ------------------------------------------------------
 raw <- all_rows |>
@@ -60,7 +64,8 @@ raw <- all_rows |>
     censored   = str_starts(DMR_Value, "<"),
     num_value  = suppressWarnings(as.numeric(str_trim(str_remove(DMR_Value, "<")))),
     begin_date = as.Date(Monitoring_Period_Begin_Date, format = "%m/%d/%Y"),
-    end_date   = as.Date(Monitoring_Period_End_Date,   format = "%m/%d/%Y")
+    end_date   = as.Date(Monitoring_Period_End_Date,   format = "%m/%d/%Y"),
+    sic        = coalesce(na_if(str_trim(.data[[SIC_COL]]), ""), "Unknown")
   ) |>
   filter(!DMR_Value %in% c("E", "FF", "GG"),
          !is.na(num_value), num_value > 0,
@@ -130,6 +135,12 @@ choices <- setNames(counts$Parameter_Name,
                     paste0(counts$Parameter_Name, " (n = ",
                            format(counts$n, big.mark = ","), ")"))
 
+# SIC filter choices: one entry per SIC code (ordered by number of facilities).
+# The count shown next to each code is live (see sic_now in the server).
+sic_counts  <- dat |> distinct(Primary_Facility_ID, Latitude, Longitude, sic) |>
+  count(sic) |> arrange(desc(n), sic)
+sic_choices <- sic_counts$sic
+
 # Monthly timeline: a record is shown for every month inside its reporting period
 months       <- seq(floor_date(min(dat$begin_date), "month"),
                     floor_date(max(dat$end_date), "month"), by = "month")
@@ -167,7 +178,15 @@ fmt_change <- function(lr) ifelse(is.na(lr), "n/a", sprintf("%+.0f%%", (2^lr - 1
 
 # ---- UI ---------------------------------------------------------------------
 ui <- fluidPage(
-  tags$head(tags$title(APP_TITLE)),
+  tags$head(
+    tags$title(APP_TITLE),
+    # updates the live count next to each SIC code without re-rendering the checkboxes
+    tags$script(HTML("Shiny.addCustomMessageHandler('sicCounts', function(m) {
+      document.querySelectorAll('.sic-n').forEach(function(el) {
+        var n = m[el.getAttribute('data-sic')];
+        el.textContent = (n === undefined) ? 0 : n;
+      });
+    });"))),
   div(style = "display:flex; justify-content:space-between; align-items:center; gap:16px; margin:12px 0;",
       div(
         tags$a(href = LOGO_URL, target = "_blank", style = "display:inline-block;",
@@ -207,7 +226,34 @@ ui <- fluidPage(
     ),
     mainPanel(
       width = 9,
-      leafletOutput("map", height = "70vh"),
+      div(style = "position:relative;",
+          leafletOutput("map", height = "70vh"),
+          absolutePanel(
+            top = 10, right = 10, width = 230, draggable = FALSE,
+            style = "z-index:1000; background:white; padding:8px 10px; border-radius:4px;
+                     box-shadow:0 0 6px rgba(0,0,0,.3); font-size:12px;",
+            tags$details(
+              open = "open",   # expanded by default; click the title to collapse
+              tags$summary(style = "cursor:pointer;",
+                           tags$strong("Filter by Primary SIC code")),
+              tags$details(
+                title = "Standard Industrial Classification (SIC) codes categorize U.S. businesses by industry.",
+                style = "margin:4px 0;",
+                tags$summary(style = "font-style:italic; cursor:pointer;",
+                             "What are these codes? (Click me!)"),
+                p(style = "margin:4px 0;",
+                  "Standard Industrial Classification (SIC) codes are four-digit codes that categorize U.S. businesses by their primary economic activity - each different SIC code is a type of industry, and ",
+                  tags$strong("facilities with the same SIC code should have similar contaminant levels."))),
+              p(style = "margin:4px 0; color:#737373; font-size:11px;",
+                "Note: SIC code counts include E/FF/GG records which have no data, so the number of records by SIC might not be the number of points on the map!"),
+              div(actionLink("sic_all", "Select all"), " | ", actionLink("sic_none", "Clear")),
+              div(style = "max-height:220px; overflow-y:auto; margin-top:4px;",
+                  checkboxGroupInput(
+                    "sic", NULL, choices = NULL,
+                    choiceValues = sic_choices,
+                    choiceNames  = lapply(sic_choices, function(s)
+                      span(s, " (", span(class = "sic-n", `data-sic` = s, "0"), ")")),
+                    selected = sic_choices))))),
       tags$hr(),
       h4("Records without data (NODI codes)"),
       tags$details(
@@ -268,7 +314,26 @@ server <- function(input, output, session) {
   current <- reactive({
     d <- months[match(input$month, month_labels)]
     dat |>
-      filter(Parameter_Name == input$param, begin_date <= d, end_date >= d)
+      filter(Parameter_Name == input$param, begin_date <= d, end_date >= d,
+             sic %in% input$sic)
+  })
+
+  observeEvent(input$sic_all,  updateCheckboxGroupInput(session, "sic", selected = sic_choices))
+  observeEvent(input$sic_none, updateCheckboxGroupInput(session, "sic", selected = character(0)))
+
+  # Live SIC counts: records for the selected contaminant whose reporting period
+  # covers the selected month, by SIC code. Includes E/FF/GG records (no data, so
+  # not on the map). Independent of which SIC boxes are ticked.
+  sic_now <- reactive({
+    d <- months[match(input$month, month_labels)]
+    active <- function(x) x |> filter(Parameter_Name == input$param,
+                                      begin_date <= d, end_date >= d)
+    bind_rows(count(active(dat), sic), count(active(flag_rows), sic)) |>
+      group_by(sic) |> summarise(n = sum(n), .groups = "drop")
+  })
+  observe({
+    s <- sic_now()
+    session$sendCustomMessage("sicCounts", as.list(setNames(s$n, s$sic)))
   })
 
   output$summary <- renderText({
