@@ -195,11 +195,15 @@ function arrowSvg(up, L_, col){
     `<polygon points="${c},${c-L_} ${c-8},${c-L_+hl} ${c+8},${c-L_+hl}" fill="${col}" ${st}/></g></svg>`;
 }
 
-// live SIC counts: records (mapped + E/FF/GG) for this contaminant active in this month
+// live SIC counts + sort order: records (mapped + E/FF/GG) for this contaminant active in this month
 function updateSicCounts(m){
   const c = {};
   sicrecs.forEach(r => { if (r[0] === P && r[1] <= m && r[2] >= m) c[r[3]] = (c[r[3]] || 0) + r[4]; });
-  document.querySelectorAll('.sicn').forEach(el => { el.textContent = c[el.dataset.sic] || 0; });
+  const items = [...document.querySelectorAll('.sicn')].map(el => {
+    const n = c[el.dataset.sic] || 0; el.textContent = n;
+    return {row: el.closest('label'), n, s: el.dataset.sic}; });
+  items.sort((a, b) => b.n - a.n || (a.s < b.s ? -1 : a.s > b.s ? 1 : 0));   // live sort: count desc, ties by code
+  items.forEach(i => i.row.parentNode.appendChild(i.row));
 }
 
 function render(){

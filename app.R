@@ -136,7 +136,7 @@ choices <- setNames(counts$Parameter_Name,
                            format(counts$n, big.mark = ","), ")"))
 
 # SIC filter choices: one entry per SIC code (ordered by number of facilities).
-# The count shown next to each code is live (see sic_now in the server).
+# The count next to each code, and the sort order, are live (see sic_now in the server).
 sic_counts  <- dat |> distinct(Primary_Facility_ID, Latitude, Longitude, sic) |>
   count(sic) |> arrange(desc(n), sic)
 sic_choices <- sic_counts$sic
@@ -180,12 +180,17 @@ fmt_change <- function(lr) ifelse(is.na(lr), "n/a", sprintf("%+.0f%%", (2^lr - 1
 ui <- fluidPage(
   tags$head(
     tags$title(APP_TITLE),
-    # updates the live count next to each SIC code without re-rendering the checkboxes
+    # updates the live count next to each SIC code and re-sorts the list by count
+    # (descending, ties by code) without re-rendering the checkboxes
     tags$script(HTML("Shiny.addCustomMessageHandler('sicCounts', function(m) {
+      var items = [];
       document.querySelectorAll('.sic-n').forEach(function(el) {
-        var n = m[el.getAttribute('data-sic')];
-        el.textContent = (n === undefined) ? 0 : n;
+        var s = el.getAttribute('data-sic'), n = (m[s] === undefined) ? 0 : m[s];
+        el.textContent = n;
+        items.push({row: el.closest('.checkbox') || el.closest('label'), n: n, s: s});
       });
+      items.sort(function(a, b) { return b.n - a.n || (a.s < b.s ? -1 : a.s > b.s ? 1 : 0); });
+      items.forEach(function(i) { i.row.parentNode.appendChild(i.row); });
     });"))),
   div(style = "display:flex; justify-content:space-between; align-items:center; gap:16px; margin:12px 0;",
       div(
